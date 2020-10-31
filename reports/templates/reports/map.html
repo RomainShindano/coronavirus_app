@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% load i18n %}
+
+{% block  content %}
+
+{% comment %}
+
+
+<div id="map">
+<!-- The button to trigger the modal form -->
+<div class="leaflet-top leaflet-right mt-2 mr-2">
+    <button type="button" id="add-report" class="btn btn-success" data-toggle="modal" data-target="#reportModal"> 
+    {% trans "Add a report" %}
+    </button>
+</div>
+
+{% endcomment %}
+
+<div id="map" class="map"></div>
+<!-- Modal Form -->
+<div class="modal fade" id="reportModal" tabindex="-1" role="dialog" aria-labelledby="reportModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reportModalLabel">
+        {% trans "Submit report" %}
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    <div class="modal-body">
+        <form id="reportForm">
+            <div class="form-group">
+                <label for="id_first_symptomatic">
+                {% trans "First symptomatic:" %}
+                </label>
+                <input type="date" name="first_symptomatic" required="required" id="id_first_symptomatic" class="form-control">
+            </div>
+            <div class="form-group">   
+                <label for="id_location">{% trans "Location:" %}</label>
+                <button type="button" onClick="locateMe()"  id="locateBtn" class="btn btn-info btn-sm mb-2 float-right p-0 px-1"><small>{% trans "Locate Me" %}</small></button>
+                <span id="cityName"></span>
+                <p class="form-text text-muted" id="status">Status Testing</p>
+                <div id="id_location_map" style="width: 100%"></div>
+                 <p id="location_map_validation_message" class="bg-danger text-white mt-2 p-2" style="display: none;">{% trans "Please choose a location for this report." %}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
+                <button type="submit" class="btn btn-success" id="refresh">{% trans "Submit" %}</button>
+                <button type="button" class="btn btn-primary" onClick="window.location.reload();"><i class="fa fa-refresh"></i> </button>
+            </div>
+        </form>                                                                                                                                                                                                                  
+    </div>
+  </div>
+</div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+    {# Extra javascript #}
+<script>
+
+/*
+$('button[type!=submit]').click(function(event) { 
+    event.preventDefault();
+    event.stopPropagation(); 
+    });
+*/
+
+    var map = new ol.Map({ 
+        target: "map",
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.OSM()
+          })
+        ],
+         view: new ol.View({
+          center: ol.proj.fromLonLat([0, 0]),
+          zoom: 3
+        })
+    });
+
+
+
+    // Setting the full screen map view
+    /*var map = L.map('map').setView([0, 0], 3);
+
+
+    L.tileLayer(
+        'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+       // attribution: 'Map data &copy; ' + mapLink,
+        maxZoom: 18,
+        }).addTo(map);
+*/
+    jQuery.ajax('/reports/report_json/', {
+        success: function(reports) {
+            // Add report markers to map
+            //reports.features.forEach(function (report) {
+            var reportFeatures = reports.features.map(function (report) {
+                //L.marker(report.geometry.coordinates).addTo(map);
+                //var lat = report.geometry.coordinates[1];
+                //var lng = report.geometry.coordinates[0];
+                
+               // L.marker([lat, lng]).addTo(map);
+
+               var lonlat = ol.proj.fromLonLat(report.geometry.coordinates);
+                var reportPoint = new ol.geom.Point(lonlat);
+                console.log(reportPoint);
+                return new ol.Feature(reportPoint);
+            });
+
+
+            var layer = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: reportFeatures,
+                }),
+            });
+
+            map.addLayer(layer);
+        }
+    });
+
+
+     // This is to add the base layer to the map
+    //var tiles = L.esri.basemapLayer("Streets").addTo(map);
+
+    // Add calendar widget to "first symptomatic" field
+    //flatpickr("#id_first_symptomatic", {});
+    var firstSymptomaticField = flatpickr("#id_first_symptomatic", {
+        defaultDate: 'today',
+    });
+
+    // Setting the small map view
+    var locationMap = L.map('id_location_map').setView([-3.579212785860631, 23.115234375], 5);
+
+    // Declaring the marker variable
+    var userlocationMarker = L.marker();
+
+    // create the geocoding control and add it to the map
+    var searchControl = L.esri.Geocoding.geosearch().addTo(locationMap);
+
+    // Make sure the location map renders correctly
+    $('#reportModal').on('shown.bs.modal', function () {
+        locationMap.invalidateSize();
+    });
+
+    L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(locationMap);
+
+
+    // This is to add the base layer to the map
+    //var tilesSmall = L.esri.basemapLayer("Streets").addTo(locationMap);
+
+
+
+// 1. CLICK ON LOCATION
+
+    // Setting the small of the modal
+    locationMap.on('click', function (event) {
+        var lat = event.latlng.lat;
+        var lng = event.latlng.lng;
+
+        var lat_fixed = (lat).toFixed(3);
+        var lng_fixed = (lng).toFixed(3);
+
+        // To add the user's marker to the small map
+        userlocationMarker.setLatLng([lat_fixed, lng_fixed]).addTo(locationMap);
+
+        // Disable the locate me button
+        document.getElementById("locateBtn").disabled = true;
+
+        //console.log(L.esri.Geocoding.reverseGeocode().latlng([lat_fixed, lng_fixed]))
+        console.log((lat, lng).toFixed(3))
+            
+        
+
+        // To find the name of the matched coordinates and display it
+        L.esri.Geocoding.reverseGeocode()
+        .latlng([lat_fixed, lng_fixed])
+        .run(function (error, result, response) {
+            console.log(result.address.Match_addr)
+            document.getElementById("cityName").innerHTML = result.address.Match_addr
+            // callback is called with error, result, and raw response
+            // result.latlng contains the coordinates of the located address
+            // result.address contains information about the match
+        });
+
+        // To remove the search icon after a click
+        searchControl.remove();
+        
+    });
+
+
+
+// 2. SEARCH FOR LOCATION
+
+    // create an empty layer group to store the results and add it to the map
+    var results = L.layerGroup().addTo(locationMap);
+
+    // listen for the results event and add every result to the map
+    searchControl.on("results", function (data) {
+        results.clearLayers();
+        for (var i = data.results.length - 1; i >= 0; i--) {
+            //results.addLayer(L.marker(data.results[i].latlng));
+            var lati = (data.results[i].latlng.lat)
+            var longi = (data.results[i].latlng.lng)
+            userlocationMarker.setLatLng([lati, longi]).addTo(locationMap);
+            document.getElementById("cityName").innerHTML = data.results[i].text
+
+            console.log(data.results[i].text)
+            console.log([data.results[i].latlng])
+        }
+        locationMap.off('click');
+
+     }); 
+ 
+
+// 3. BUTTON TO LOCATE ME
+
+    // A function to find the user location
+    function locateMe() {
+
+        const status = document.querySelector('#status');
+
+        function success(position) {
+            const latitude  = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            
+            // Getting accurate geolocation with toFixed
+            latitude_trancated = (latitude).toFixed(3)
+            longitude_trancated = (longitude).toFixed(3)
+
+            status.textContent = '';
+            userlocationMarker.setLatLng([latitude_trancated, longitude_trancated]).addTo(locationMap);
+            locationMap.setView([latitude, longitude], 14);
+            tilesSmall.remove();
+
+
+            /* Getting and displaying the locantion name 
+            $.get('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+ latitude+'&lon='+ longitude+'', function(data){
+                document.getElementById("cityName").innerHTML = data.address.city
+                }) */ 
+            
+            // To find the name of the matched coordinates and display it
+            L.esri.Geocoding.reverseGeocode()
+            .latlng([latitude_trancated, longitude_trancated])
+            .run(function (error, result, response) {
+                console.log(result.address.Match_addr)
+                document.getElementById("cityName").innerHTML = result.address.Match_addr
+
+            }); 
+
+            }
+   
+
+            function error() {
+                status.textContent = 'Unable to retrieve your location';
+            }
+
+            if(!navigator.geolocation) {
+                status.textContent = 'Geolocation is not supported by your browser';
+            } else { 
+                status.textContent = 'Locating…';
+                navigator.geolocation.getCurrentPosition(success, error);
+                searchControl.remove();
+                locationMap.off('click');
+                
+            }
+    
+        
+    }
+
+
+
+// To SUBMIT THE LOCATION TO THE DATABASE
+
+$('#reportForm').submit(function(event) {
+    event.preventDefault();
+
+    if (!userlocationMarker.getLatLng()) {
+        $("#location_map_validation_message").show();
+    } else {
+        $("#location_map_validation_message").hide();
+
+        var location = userlocationMarker.toGeoJSON()
+
+        var firstSymptomatic = firstSymptomaticField.selectedDates[0];
+
+        //var name = $('#cityName').val()
+
+        var reportData = {
+            first_symptomatic: moment(firstSymptomatic).format('YYYY-MM-DD'),
+            location: location.geometry
+        };
+
+        jQuery.ajax ({
+            url: "/reports/report_json/",
+            type: "POST",
+            data: JSON.stringify(reportData),
+            dataType: "json",
+            contentType: "application/json; charset=utf-8",
+            success: function(){
+                console.log("success")
+                window.location.reload();
+            },
+            error: function (error) {
+                console.log(error);
+            }
+        });
+    }
+});
+
+</script>
+
+{% endblock extra_js %}
+
+{% block extra_css %}
+<style>
+
+    html, body, #map {
+        height: 100%;
+        width: 100%;
+    }
+    .btn {
+        pointer-events: auto;
+    }
+
+    #id_location_map {
+        height: 250px;
+    }
+</style>
+
+{% endblock extra_css %}

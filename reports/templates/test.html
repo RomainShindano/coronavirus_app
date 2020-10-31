@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block  content %}
+<div id="map">
+<!-- The button to trigger the modal form -->
+<div class="leaflet-top leaflet-right mt-2 mr-2">
+    <input type="button" id="add-report" value="Add a report" onClick="" class="btn btn-success" data-toggle="modal" data-target="#reportModal"/>
+</div>
+<!-- Modal Form -->
+<div class="modal fade" id="reportModal" tabindex="-1" role="dialog" aria-labelledby="reportModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reportModalLabel">Submit report</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    <div class="modal-body">
+        <form>
+            <div class="form-group">
+                <label for="id_first_symptomatic">First symptomatic:</label>
+                <input type="date" name="first_symptomatic" required="required" id="id_first_symptomatic" class="form-control">
+            </div>
+            <div class="form-group">   
+                <label for="id_location">Location:</label>
+                <button type="button" onClick="locateMe()"  id="locateBtn" class="btn btn-info btn-sm mb-2 float-right p-0 px-1"><small>Locate Me</small></button>
+                <span id="cityName"></span>
+                <p class="form-text text-muted" id="status">Status Testing</p>
+                <div id="id_location_map" style="width: 100%"></div>
+            </div>
+        </form>                                                                                                                                                                                                                  
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      <button type="button" class="btn btn-primary">Save changes</button>
+    </div>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+    {# Extra javascript #}
+<script>
+
+    // Setting the full screen map view
+    var map = L.map('map').setView([0, 0], 3);
+
+    /*var mapLink = 
+        '<a href="http://openstreetmap.org">OpenStreetMap</a>'; */
+
+    L.tileLayer(
+        'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+       // attribution: 'Map data &copy; ' + mapLink,
+        maxZoom: 18,
+        }).addTo(map);
+
+    jQuery.ajax('/reports/report_json/', {
+        success: function(reports) {
+            // Add report markers to map
+            reports.features.forEach(function (report) {
+                L.marker(report.geometry.coordinates).addTo(map);
+            });
+        }
+    });
+
+     // This is to add the base layer to the map
+    var tiles = L.esri.basemapLayer("Streets").addTo(map);
+
+    // Add calendar widget to "first symptomatic" field
+    flatpickr("#id_first_symptomatic", {});
+
+    // Setting the small map view
+    var locationMap = L.map('id_location_map').setView([-3.579212785860631, 23.115234375], 5);
+
+    // Declaring the marker variable
+    var userlocationMarker = L.marker();
+
+    // create the geocoding control and add it to the map
+    var searchControl = L.esri.Geocoding.geosearch().addTo(locationMap);
+
+    // Make sure the location map renders correctly
+    $('#reportModal').on('shown.bs.modal', function () {
+        locationMap.invalidateSize();
+    });
+
+    L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(locationMap);
+
+
+    // This is to add the base layer to the map
+    var tilesSmall = L.esri.basemapLayer("Streets").addTo(locationMap);
+
+
+
+
+
+    // Setting the small of the modal
+    locationMap.on('click', function (event) {
+        var lat = event.latlng.lat;
+        var lng = event.latlng.lng;
+        userlocationMarker.setLatLng([lat, lng]).addTo(locationMap);
+        document.getElementById("locateBtn").disabled = true;
+
+        console.log(L.esri.Geocoding.reverseGeocode().latlng([lat, lng]))
+        console.log((lat, lng).toFixed(3))
+
+
+        // To find the name of the matched coordinates
+        L.esri.Geocoding.reverseGeocode()
+        .latlng([lat, lng])
+        .run(function (error, result, response) {
+            console.log(result.address.Match_addr)
+            document.getElementById("cityName").innerHTML = result.address.Match_addr
+            // callback is called with error, result, and raw response
+            // result.latlng contains the coordinates of the located address
+            // result.address contains information about the match
+        });
+
+        // To remove the search icon after a click
+        searchControl.remove();
+    });
+
+
+
+    // create an empty layer group to store the results and add it to the map
+    var results = L.layerGroup().addTo(locationMap);
+
+    // listen for the results event and add every result to the map
+    searchControl.on("results", function (data) {
+        results.clearLayers();
+        for (var i = data.results.length - 1; i >= 0; i--) {
+            results.addLayer(L.marker(data.results[i].latlng));
+            document.getElementById("cityName").innerHTML = data.results[i].text
+
+            console.log(data.results[i].text)
+            console.log(data.results[i].latlng)
+        }
+        locationMap.off('click');
+
+     }); 
+ 
+
+
+
+
+    // A function to find the user location
+    function locateMe() {
+
+        const status = document.querySelector('#status');
+
+        function success(position) {
+            const latitude  = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            
+            // Getting accurate geolocation with toFixed
+            latitude_trancated = (latitude).toFixed(3)
+            longitude_trancated = (longitude).toFixed(3)
+
+            status.textContent = '';
+            userlocationMarker.setLatLng([latitude_trancated, longitude_trancated]).addTo(locationMap);
+            locationMap.setView([latitude, longitude], 14);
+            tilesSmall.remove();
+
+
+            /* Getting and displaying the locantion name 
+            $.get('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+ latitude+'&lon='+ longitude+'', function(data){
+                document.getElementById("cityName").innerHTML = data.address.city
+                }) */ 
+            
+            // To find the name of the matched coordinates
+            L.esri.Geocoding.reverseGeocode()
+            .latlng([latitude_trancated, longitude_trancated])
+            .run(function (error, result, response) {
+                console.log(result.address.Match_addr)
+                document.getElementById("cityName").innerHTML = result.address.Match_addr
+
+            }); 
+
+            }
+   
+
+            function error() {
+                status.textContent = 'Unable to retrieve your location';
+            }
+
+            if(!navigator.geolocation) {
+                status.textContent = 'Geolocation is not supported by your browser';
+            } else { 
+                status.textContent = 'Locating…';
+                navigator.geolocation.getCurrentPosition(success, error);
+                searchControl.remove();
+                locationMap.off('click');
+                
+            }
+    
+        
+    }
+
+   
+
+
+
+
+
+       {% comment %}
+            Adding marker to the map using django template and javascript
+        {% for report in object_list  %}
+            L.marker({{ report.lat_lng }}).addTo(map);
+        {% endfor %}
+
+        {% endcomment %}
+
+</script>
+
+{% endblock extra_js %}
+
+{% block extra_css %}
+<style>
+
+    html, body, #map {
+        height: 100%;
+        width: 100%;
+    }
+    .btn {
+        pointer-events: auto;
+    }
+
+    #id_location_map {
+        height: 250px;
+    }
+</style>
+
+{% endblock extra_css %}

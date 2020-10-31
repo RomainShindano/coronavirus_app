@@ -1,0 +1,11 @@
+docker run \
+--name "covid_app-postgis" \
+-p 5433:5433 \
+-e -t POSTGRES_USER=test \
+-e POSTGRES_PASS=testing321 \
+-e POSTGRES_DBNAME=coronavirus_app_db \
+
+> docker run --name covid_app-postgis -e POSTGRES_PASSWORD=secretpassword -d postgis/postgis
+
+
+To run the file: ./start_postgis.sh
